@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: studentmng-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: studentmng
+  template:
+    metadata:
+      labels:
+        app: studentmng
+    spec:
+      containers:
+        - name: studentmng
+          image: studentmng:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3000
