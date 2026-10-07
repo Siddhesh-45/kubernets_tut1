@@ -1,6 +1,13 @@
 pipeline {
     agent any
 
+    environment {
+        IMAGE_NAME = 'jenkinspipeline'
+        CONTAINER_NAME = 'jenkinspipeline-app'
+        HOST_PORT = '30001'
+        CONTAINER_PORT = '3000'
+    }
+
     stages {
 
         stage('Checkout') {
@@ -9,60 +16,74 @@ pipeline {
             }
         }
 
-        stage('Building Docker Image') {
-            steps {
-                script {
-                    sh 'docker build -t jenkinspipeline .'
-                }
-            }
-        }
-
-        stage('Verify Kubernetes') {
+        stage('Build Docker Image') {
             steps {
                 sh '''
-                    set -e
-
-                    echo "===== Kubernetes Version ====="
-                    kubectl version --client
-
-                    echo "===== Kubeconfig ====="
-                    echo "HOME=$HOME"
-                    echo "KUBECONFIG=$KUBECONFIG"
-
-                    echo "===== Available Contexts ====="
-                    kubectl config get-contexts
-
-                    echo "===== Current Context ====="
-                    kubectl config current-context
-
-                    echo "===== Cluster Info ====="
-                    kubectl cluster-info
-
-                    echo "===== Nodes ====="
-                    kubectl get nodes
+                    echo "===== Building Docker Image ====="
+                    docker build -t ${IMAGE_NAME}:latest .
                 '''
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Stop Old Container') {
             steps {
-                script {
-                    sh 'kubectl apply -f deployment.yaml --validate=false'
-                    sh 'kubectl apply -f service.yaml'
-                }
+                sh '''
+                    echo "===== Stopping Old Container ====="
+
+                    docker stop ${CONTAINER_NAME} || true
+                '''
+            }
+        }
+
+        stage('Remove Old Container') {
+            steps {
+                sh '''
+                    echo "===== Removing Old Container ====="
+
+                    docker rm ${CONTAINER_NAME} || true
+                '''
+            }
+        }
+
+        stage('Deploy Docker Container') {
+            steps {
+                sh '''
+                    echo "===== Starting New Container ====="
+
+                    docker run -d \
+                        --name ${CONTAINER_NAME} \
+                        -p ${HOST_PORT}:${CONTAINER_PORT} \
+                        --restart unless-stopped \
+                        ${IMAGE_NAME}:latest
+                '''
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                sh '''
+                    echo "===== Running Containers ====="
+                    docker ps
+
+                    echo "===== Container Status ====="
+                    docker inspect -f '{{.State.Status}}' ${CONTAINER_NAME}
+                '''
             }
         }
     }
 
     post {
         success {
-            echo "Pipeline executed successfully"
-            echo "Application deployed successfully"
+            echo "========================================"
+            echo "Docker deployment successful!"
             echo "Application is running on port 30001"
+            echo "========================================"
         }
 
         failure {
-            echo "Pipeline execution failed"
+            echo "========================================"
+            echo "Docker deployment failed!"
+            echo "========================================"
         }
     }
 }
